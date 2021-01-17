@@ -2,6 +2,7 @@
 
 
 **Creating:**
+
 *Firstly DR-region(ca-central-1) needs to be created because there is a dependency for primary-region(us-east-1) for DR*
 
 *Run the command below with the specific order*
