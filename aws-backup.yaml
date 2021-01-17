@@ -1,0 +1,418 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creating AWS Backup Plans with Backup Selections including SNS componenets for notifications.
+#Firstly DR-region(ca-central-1) needs to be created because there is a dependency for primary-region(us-east-1) for DR
+#Subscriptions need to be approved via the sent email URLs to be alerted when backup failure happens
+#Created: aws cloudformation create-stack --stack-name aws-backup --template-body file://aws-backup.yaml
+#Update: aws cloudformation update-stack --stack-name aws-backup --template-body file://aws-backup.yam
+#Delete: aws cloudformation delete-stack --stack-name aws-backup
+
+Parameters:
+  Email:
+    Description: Email address where abackup fails send alert notifications
+    Type: String 
+    Default: devops@cool-domain.com
+  CompletionWindowMinutes:
+    Type: String
+    Default: 300
+  StartWindowMinutes:
+    Type: String
+    Default: 60
+  Aging0: 
+    Type: String
+    Description: Backup needs to be kept for 3 days
+    Default: 3
+  Aging1:
+    Type: String
+    Description: Backup needs to be kept for 30 days
+    Default: 30  
+  Aging2:
+    Type: String
+    Description: Backup needs to be kept for 60 days
+    Default: 60
+  Aging3: 
+    Type: String
+    Description: Backup needs to be kept for 30 days
+    Default: 90
+  ReplicaAging1:
+    Type: String
+    Description: Backup needs to be Replicated to DR and needs to be kept for 30 days
+    Default: 30 
+  ReplicaAging2:
+    Type: String
+    Description: Backup needs to be Replicated to DR and needs to be kept for 60 days
+    Default: 60
+  ReplicaAging3:
+    Type: String
+    Description: Backup needs to be Replicated to DR and needs to be kept for 90 days
+    Default: 90            
+  CreateNewBackupVault:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: true
+  BackupSelectionName:
+    Type: String
+    Description: AWS Backup name for BackupSelection
+    Default: DailyBackup_Resource
+  DrRegion:
+    Type: String
+    Description: Region DR Backups are kept
+    Default: ca-central-1
+  Cron:
+    Description: Time to do backup(cron)
+    Type: String
+    Default: cron(0 03 ? * * *)
+
+Conditions:
+  CreateNewVault: !Equals [ !Ref CreateNewBackupVault, "true" ]
+  DbSnapshotReplicator: !Equals [ !Sub "${AWS::Region}", "us-east-1" ]
+  
+Resources:
+
+  AWSBackupFailureTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: AWSBackupFailure
+      Tags:
+        - Key: created_by
+          Value: !Sub "CF-${AWS::StackName}"   
+
+  AWSBackupFailureSubscription:
+    Type: AWS::SNS::Subscription
+    DependsOn: AWSBackupFailureTopic
+    Properties: 
+      Endpoint: !Ref Email
+      FilterPolicy: {
+        "State": ["anything-but": "COMPLETED"]
+      }
+      Protocol: email
+      TopicArn: !Ref AWSBackupFailureTopic       
+
+  AWSBackupFailureSnsPolicy:
+    Type: AWS::SNS::TopicPolicy
+    DependsOn: AWSBackupFailureTopic
+    Properties:
+      PolicyDocument:
+        Version: '2008-10-17'
+        Statement:
+        - Sid: "__default_statement_ID"
+          Effect: Allow
+          Principal:
+            AWS: "*"
+          Action:
+          - SNS:GetTopicAttributes
+          - SNS:SetTopicAttributes
+          - SNS:AddPermission
+          - SNS:RemovePermission
+          - SNS:DeleteTopic
+          - SNS:Subscribe
+          - SNS:ListSubscriptionsByTopic
+          - SNS:Publish
+          - SNS:Receive
+          Resource: !Sub "arn:aws:sns:us-east-1:${AWS::AccountId}:BackupFailure"
+          Condition:
+            StringEquals:
+              AWS:SourceOwner: !Sub '${AWS::AccountId}'
+        - Sid: BackupFailure
+          Effect: Allow
+          Principal:
+            Service: backup.amazonaws.com
+          Action: SNS:Publish
+          Resource: !Ref AWSBackupFailureTopic
+      Topics:
+        - Ref: AWSBackupFailureTopic
+  
+  StorageBackupVault:
+    Type: AWS::Backup::BackupVault
+    Condition: CreateNewVault
+    DependsOn: AWSBackupFailureTopic
+    Properties:
+      BackupVaultName: !Sub ${AWS::AccountId}_${AWS::Region}_backup-vault
+      Notifications: {
+          BackupVaultEvents: [BACKUP_JOB_COMPLETED],
+          SNSTopicArn: !Ref AWSBackupFailureTopic
+      }
+
+  StorageBackupPlanAging0:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_${Aging0}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_${Aging0}d
+            TargetBackupVault: !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${Aging0}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "${Aging0}d"
+            }
+      BackupPlanTags: {
+        "rp-retention": !Sub "${Aging0}d"
+      }
+
+  StorageBackupPlanAging1:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_${Aging1}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_${Aging1}d
+            TargetBackupVault: !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${Aging1}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "${Aging1}d"
+            } 
+      BackupPlanTags: {
+        "rp-retention": !Sub "${Aging1}d"
+      }    
+
+  StorageBackupPlanReplicaAging1:
+    Type: AWS::Backup::BackupPlan
+    Condition: DbSnapshotReplicator
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_Replication_${ReplicaAging1}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_Replication_${ReplicaAging1}d
+            TargetBackupVault: !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${ReplicaAging1}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "R${ReplicaAging1}d"
+            }
+            CopyActions:
+              - Lifecycle:
+                  #MoveToColdStorageAfterDays: 0
+                  DeleteAfterDays: !Sub "${ReplicaAging1}"
+                DestinationBackupVaultArn: !Sub "arn:aws:backup:${DrRegion}:${AWS::AccountId}:backup-vault:${AWS::AccountId}_${DrRegion}_backup-vault"
+      BackupPlanTags: {
+        "rp-retention": !Sub "R${ReplicaAging1}d"
+      }    
+      
+  StorageBackupPlanAging2:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_${Aging2}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_${Aging2}d
+            TargetBackupVault: !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${Aging2}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "${Aging2}d"
+            }
+      BackupPlanTags: {
+        "rp-retention": !Sub "${Aging2}d"
+      }     
+
+  StorageBackupPlanReplicaAging2:
+    Type: AWS::Backup::BackupPlan
+    Condition: DbSnapshotReplicator
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_Replication_${ReplicaAging2}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_Replication_${ReplicaAging2}d
+            TargetBackupVault: !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${ReplicaAging2}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "R${ReplicaAging2}d"
+            }
+            CopyActions:
+              - Lifecycle:
+                  #MoveToColdStorageAfterDays: 0
+                  DeleteAfterDays: !Sub "${ReplicaAging2}"
+                DestinationBackupVaultArn: !Sub "arn:aws:backup:${DrRegion}:${AWS::AccountId}:backup-vault:${AWS::AccountId}_${DrRegion}_backup-vault"
+      BackupPlanTags: {
+        "rp-retention": !Sub "R${ReplicaAging2}d"
+      } 
+
+  StorageBackupPlanAging3:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_${Aging3}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_${Aging3}d
+            TargetBackupVault:  !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${Aging3}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "${Aging3}d"
+            }
+      BackupPlanTags: {
+        "rp-retention": !Sub "${Aging3}d"
+      }    
+
+  StorageBackupPlanReplicaAging3:
+    Type: AWS::Backup::BackupPlan
+    Condition: DbSnapshotReplicator
+    Properties:
+      BackupPlan: 
+        BackupPlanName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-plan_Replication_${ReplicaAging3}d
+        BackupPlanRule:
+          - 
+            RuleName: !Sub ${AWS::AccountId}_${AWS::Region}_daily-backup-rule_Replication_${ReplicaAging3}d
+            TargetBackupVault: !Ref StorageBackupVault
+            ScheduleExpression: !Ref Cron
+            CompletionWindowMinutes: !Sub "${CompletionWindowMinutes}"
+            StartWindowMinutes: !Sub "${StartWindowMinutes}"
+            Lifecycle: {
+                DeleteAfterDays: !Sub "${ReplicaAging3}"
+            }
+            RecoveryPointTags: {
+              "rp-retention": !Sub "R${ReplicaAging3}d"
+            }
+            CopyActions:
+              - Lifecycle:
+                  #MoveToColdStorageAfterDays: 0
+                  DeleteAfterDays: !Sub "${ReplicaAging3}"
+                DestinationBackupVaultArn: !Sub "arn:aws:backup:${DrRegion}:${AWS::AccountId}:backup-vault:${AWS::AccountId}_${DrRegion}_backup-vault"
+      BackupPlanTags: {
+        "rp-retention": !Sub "R${ReplicaAging3}d"
+      } 
+
+  StorageBackupSelectionByTagsAging0:
+    Type: AWS::Backup::BackupSelection
+    DependsOn: StorageBackupPlanAging0
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_${Aging0}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "${Aging0}d"
+      BackupPlanId: !Ref StorageBackupPlanAging0
+
+  StorageBackupSelectionByTagsAging1:
+    Type: AWS::Backup::BackupSelection
+    DependsOn: StorageBackupPlanAging1
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_${Aging1}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "${Aging1}d"
+      BackupPlanId: !Ref StorageBackupPlanAging1
+
+  StorageBackupSelectionByTagsReplicaAging1:
+    Type: AWS::Backup::BackupSelection
+    Condition: DbSnapshotReplicator
+    DependsOn: StorageBackupPlanReplicaAging1
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_Replication_${ReplicaAging1}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "R${ReplicaAging1}d"
+      BackupPlanId: !Ref StorageBackupPlanReplicaAging1   
+
+  StorageBackupSelectionByTagsAging2:
+    Type: AWS::Backup::BackupSelection
+    DependsOn: StorageBackupPlanAging2
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_${Aging2}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "${Aging2}d"
+      BackupPlanId: !Ref StorageBackupPlanAging2        
+
+  StorageBackupSelectionByTagsReplicaAging2:
+    Type: AWS::Backup::BackupSelection
+    Condition: DbSnapshotReplicator
+    DependsOn: StorageBackupPlanReplicaAging2
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_Replication_${ReplicaAging2}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "R${ReplicaAging2}d"
+      BackupPlanId: !Ref StorageBackupPlanReplicaAging2 
+
+  StorageBackupSelectionByTagsAging3:
+    Type: AWS::Backup::BackupSelection
+    DependsOn: StorageBackupPlanAging3 
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_${Aging3}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "${Aging3}d"
+      BackupPlanId: !Ref StorageBackupPlanAging3 
+
+  StorageBackupSelectionByTagsReplicaAging3:
+    Type: AWS::Backup::BackupSelection
+    Condition: DbSnapshotReplicator
+    DependsOn: StorageBackupPlanReplicaAging3
+    Properties:
+      BackupSelection: 
+        SelectionName: !Sub "${BackupSelectionName}_Replication_${ReplicaAging3}d"
+        IamRoleArn: !Sub "arn:aws:iam::${AWS::AccountId}:role/service-role/AWSBackupDefaultServiceRole"
+        ListOfTags:
+          - 
+            ConditionType: "STRINGEQUALS"
+            ConditionKey: "makebackup"
+            ConditionValue: !Sub "R${ReplicaAging3}d"
+      BackupPlanId: !Ref StorageBackupPlanReplicaAging3     
+ 
+
+Outputs:
+  BackupVaultArn:
+    Description: Backup Vault ARN
+    Condition: CreateNewVault
+    Value: !GetAtt StorageBackupVault.BackupVaultArn
+  SnsTopicArn:
+    Value: !Ref AWSBackupFailureTopic
