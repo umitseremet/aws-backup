@@ -12,6 +12,8 @@
 
 *Subscriptions need to be approved via the sent email URLs to be alerted when backup failure happens*
 
-**Cleaning***
+
+
+**Cleaning:**
 
 `aws cloudformation delete-stack --stack-name aws-backup`
