@@ -1,0 +1,19 @@
+policies:
+  - name: periodical-non-prod-backup-tag-checked-for-EC2
+    resource: ec2
+    filters:
+     - and:
+       - tag:makebackup: absent
+       - or:
+         - "tag:ENV": test
+         - "tag:ENV": alpha
+         - "tag:ENV": test
+         - "tag:ENV": sandbox
+         - "tag:ENV": nonprod
+         - "tag:ENV": Prototype
+         - "tag:ENV": beta
+         - "tag:ENV": empty
+    actions:
+     - type: tag
+       key: makebackup
+       value: 3d
