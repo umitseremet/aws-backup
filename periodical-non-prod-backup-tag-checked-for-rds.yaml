@@ -1,0 +1,29 @@
+policies:
+  - name: periodical-non-prod-backup-tag-checked-for-RDS
+    resource: rds
+    filters:
+     - and:
+       - tag:makebackup: absent
+       - or:
+         - tag:ENV: test
+         - tag:ENV: alpha
+         - tag:ENV: sandbox
+         - tag:ENV: nonprod
+         - tag:ENV: Prototype
+         - tag:ENV: beta
+         - tag:ENV: empty
+         - tag:env: test
+         - tag:env: alpha
+         - tag:env: sandbox
+         - tag:env: nonprod
+         - tag:env: Prototype
+         - tag:env: beta
+         - tag:env: empty
+       - not:
+         - or:
+           - tag:ENV: prod
+           - tag:env: prod
+    actions:
+     - type: tag
+       key: makebackup
+       value: 3d
