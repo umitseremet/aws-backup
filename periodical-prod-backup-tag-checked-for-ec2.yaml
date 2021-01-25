@@ -1,10 +1,12 @@
 policies:
-  - name: periodical-prod-backup-tag-checked-for-ec2
+  - name: periodical-prod-backup-tag-checked-for-EC2
     resource: ec2
     filters:
      - and:
-       - tag:ENV: prod
        - tag:makebackup: absent
+       - or:
+         - tag:ENV: prod
+         - tag:env: prod
     actions:
      - type: tag
        key: makebackup
