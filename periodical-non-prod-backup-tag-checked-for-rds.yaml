@@ -1,5 +1,14 @@
 policies:
   - name: periodical-non-prod-backup-tag-checked-for-RDS
+    description: |
+      Cloud Custodian Periodical Non-Prod Backup-Tag Checker
+    comment: |
+      Tags are checked according to the filter in thi policy and they
+      are tried to be standardized for aws-native-backup plans
+    mode:
+      type: periodic
+      role: arn:aws:iam::{account_id}:role/Administrator
+      schedule: "cron(00 * * * ? *)"
     resource: rds
     filters:
      - and:
