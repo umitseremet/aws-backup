@@ -7,12 +7,18 @@ policies:
        - or:
          - "tag:ENV": test
          - "tag:ENV": alpha
-         - "tag:ENV": test
          - "tag:ENV": sandbox
          - "tag:ENV": nonprod
          - "tag:ENV": Prototype
          - "tag:ENV": beta
          - "tag:ENV": empty
+         - "tag:env": test
+         - "tag:env": alpha
+         - "tag:env": sandbox
+         - "tag:env": nonprod
+         - "tag:env": Prototype
+         - "tag:env": beta
+         - "tag:env": empty
     actions:
      - type: tag
        key: makebackup
