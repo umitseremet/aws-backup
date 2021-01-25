@@ -1,0 +1,13 @@
+policies:
+  - name: periodical-prod-backup-tag-checked-for-RDS
+    resource: rds
+    filters:
+     - and:
+       - tag:makebackup: absent
+       - or:
+         - tag:ENV: prod
+         - tag:env: prod
+    actions:
+     - type: tag
+       key: makebackup
+       value: R30d
