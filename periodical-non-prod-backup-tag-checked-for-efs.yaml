@@ -1,0 +1,38 @@
+policies:
+  - name: periodical-non-prod-backup-tag-checked-for-EFS
+    description: |
+      Cloud Custodian Periodical Non-Prod Backup-Tag Checker
+    comment: |
+      Tags are checked according to the filter in thi policy and they
+      are tried to be standardized for aws-native-backup plans
+    mode:
+     type: periodic
+     role: arn:aws:iam::{account_id}:role/Administrator
+     schedule: "cron(00 * * * ? *)"
+    resource: efs
+    filters:
+     - and:
+       - tag:makebackup: absent
+       - or:
+         - tag:ENV: test
+         - tag:ENV: alpha
+         - tag:ENV: sandbox
+         - tag:ENV: nonprod
+         - tag:ENV: Prototype
+         - tag:ENV: beta
+         - tag:ENV: empty
+         - tag:env: test
+         - tag:env: alpha
+         - tag:env: sandbox
+         - tag:env: nonprod
+         - tag:env: Prototype
+         - tag:env: beta
+         - tag:env: empty
+       - not:
+         - or:
+           - tag:ENV: prod
+           - tag:env: prod
+    actions:
+     - type: tag
+       key: makebackup
+       value: 3d
