@@ -17,3 +17,8 @@
 **Cleaning:**
 
 `aws cloudformation delete-stack --stack-name aws-backup`
+
+
+**Cloud-Custodian Usage **
+
+`custodian  run --output-dir ./LOGS --cache-period 0 -c periodical-prod-backup-tag-checked-for-ec2.yaml`
